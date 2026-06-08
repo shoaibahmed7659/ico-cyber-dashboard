@@ -848,6 +848,7 @@ with tabs[7]:
         imp_s=bs.get(p_band,1)
         w72=1 if any(t in p_time.lower() for t in ["0 to 24","24 to 48","48 to 72"]) else 0
         X_new=pd.DataFrame([{"Sector":p_s,"Data_Subject_Type":p_dst,"Data_Type":p_dt,"Incident_Type":p_it,"No_Data_Subjects_Affected":p_band,"Time_Taken_to_Report":p_time,"Year":p_year,"Is_Special_Category":is_sc,"Impact_Score":imp_s,"Within_72hrs":w72}])
+        best_pipe = model_results[best_name]["pipe"]
         proba=best_pipe.predict_proba(X_new)[0,1]
         label="Cyber" if proba>=0.5 else "Non-Cyber"
         sev_s=3*int(proba>=0.5)+imp_s+is_sc*2
