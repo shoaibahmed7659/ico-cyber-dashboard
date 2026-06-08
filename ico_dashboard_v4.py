@@ -331,15 +331,15 @@ def build_excel_export(df_export):
     _sec(ws4,4,2,6,"  KEY PERFORMANCE INDICATORS",TEAL,WHITE,11)
     for ci,h in enumerate(["Metric","Value","Format","Interpretation","Source"],2):
         _hdr(ws4.cell(5,ci,h),bg=TEAL); ws4.row_dimensions[5].height=22
-    ic=df_export.get("Is_Cyber",pd.Series([0]*len(df_export)))
-    hi=df_export.get("Is_High_Impact",pd.Series([0]*len(df_export)))
-    sv=df_export.get("Severity_Score",pd.Series([0]*len(df_export)))
-    im=df_export.get("Impact_Score",pd.Series([0]*len(df_export)))
-    sc_f=df_export.get("Is_Special_Category",pd.Series([0]*len(df_export)))
-    w7=df_export.get("Within_72hrs",pd.Series([0]*len(df_export)))
-    st_c=df_export.get("Sector",pd.Series(["Unknown"]*len(df_export)))
-    yr_c=df_export.get("Year",pd.Series([0]*len(df_export)))
-    srt=df_export.get("Sector_Risk_Tier",pd.Series(["Low"]*len(df_export)))
+    ic=df_export["Is_Cyber"] if "Is_Cyber" in df_export.columns else pd.Series([0]*len(df_export))
+    hi=df_export["Is_High_Impact"] if "Is_High_Impact" in df_export.columns else pd.Series([0]*len(df_export))
+    sv=df_export["Severity_Score"] if "Severity_Score" in df_export.columns else pd.Series([0]*len(df_export))
+    im=df_export["Impact_Score"] if "Impact_Score" in df_export.columns else pd.Series([0]*len(df_export))
+    sc_f=df_export["Is_Special_Category"] if "Is_Special_Category" in df_export.columns else pd.Series([0]*len(df_export))
+    w7=df_export["Within_72hrs"] if "Within_72hrs" in df_export.columns else pd.Series([0]*len(df_export))
+    st_c=df_export["Sector"] if "Sector" in df_export.columns else pd.Series(["Unknown"]*len(df_export))
+    yr_c=df_export["Year"] if "Year" in df_export.columns else pd.Series([0]*len(df_export))
+    srt=df_export["Sector_Risk_Tier"] if "Sector_Risk_Tier" in df_export.columns else pd.Series(["Low"]*len(df_export))
     kps=[
         ("Total Breach Reports",len(df_export),"#,##0","All rows in this filtered export","ICO dataset"),
         ("Cyber Breaches",int(ic.sum()),"#,##0","ICO-classified as cyber origin","Derived: Is_Cyber"),
@@ -401,8 +401,8 @@ def load_data():
     band_score    = {"1 to 9":1,"10 to 99":2,"100 to 1k":3,"1k to 10k":4,"10k to 100k":5,"Over 100k":6}
     sc_kw         = ["health","racial","ethnic","biometric","genetic","sexual","religion","political","criminal"]
     df["Is_Cyber"]            = (df["Incident_Category"]=="Cyber").astype(int)
-    df["Is_High_Impact"]      = df["No_Data_Subjects_Affected"].isin(["1k to 10k","10k to 100k","Over 100k"]).astype(int)
-    df["Impact_Score"]        = df["No_Data_Subjects_Affected"].map(band_score).fillna(0)
+    df["Is_High_Impact"]      = df["No_Data_Subjects_Affected"].astype(str).isin(["1k to 10k","10k to 100k","Over 100k"]).astype(int)
+    df["Impact_Score"]        = df["No_Data_Subjects_Affected"].astype(str).map(band_score).fillna(0).astype(int)
     df["Is_Special_Category"] = df["Data_Type"].fillna("").str.lower().apply(lambda x:int(any(k in x for k in sc_kw)))
     if "Time_Taken_to_Report" in df.columns:
         df["Within_72hrs"]    = df["Time_Taken_to_Report"].fillna("").str.lower().apply(
