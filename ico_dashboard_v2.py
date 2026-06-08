@@ -103,7 +103,7 @@ def train_models(df):
     preproc = ColumnTransformer([
         ("cat", Pipeline([
             ("imp",    SimpleImputer(strategy="most_frequent")),
-            ("ohe",    OneHotEncoder(handle_unknown="ignore", sparse_output=False))
+            ("ohe",    OneHotEncoder(handle_unknown="ignore", sparse=False))
         ]), cat_feats),
         ("num", SimpleImputer(strategy="median"), num_feats),
     ])
@@ -761,21 +761,18 @@ with tabs[6]:
             st.plotly_chart(fig_g, use_container_width=True)
 
         with col_text:
+            prob_pct = f"{proba*100:.1f}%"
             if label == "Cyber":
                 st.error(
-                    f"**Classification: {label}**  
-"
-                    f"Estimated cyber probability: **{proba*100:.1f}%**  
-"
-                    f"Model used: *{best_model_name}*"
+                    "Classification: " + label + "  \n"
+                    + "Estimated cyber probability: " + prob_pct + "  \n"
+                    + "Model used: " + best_model_name
                 )
             else:
                 st.success(
-                    f"**Classification: {label}**  
-"
-                    f"Estimated cyber probability: **{proba*100:.1f}%**  
-"
-                    f"Model used: *{best_model_name}*"
+                    "Classification: " + label + "  \n"
+                    + "Estimated cyber probability: " + prob_pct + "  \n"
+                    + "Model used: " + best_model_name
                 )
             st.caption(
                 "This model is trained on UK ICO historical incident data. "
