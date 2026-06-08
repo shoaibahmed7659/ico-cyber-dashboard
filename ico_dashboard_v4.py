@@ -816,26 +816,6 @@ with tabs[6]:
     for k,v in model_results.items():
         comp.append({"Model":k,"Accuracy":round(v["report"]["accuracy"],3),"Precision (Cyber)":round(v["report"].get("1",{}).get("precision",0),3),"Recall (Cyber)":round(v["report"].get("1",{}).get("recall",0),3),"F1 (Cyber)":round(v["report"].get("1",{}).get("f1-score",0),3),"ROC-AUC":round(v["auc"],3),"Best?":"✅" if k==best_name else ""})
     st.dataframe(pd.DataFrame(comp),use_container_width=True,hide_index=True)
-    rc1,rc2=st.columns(2)
-    with rc1:
-        fig_roc=go.Figure()
-        fig_roc.add_trace(go.Scatter(x=res["fpr"],y=res["tpr"],mode="lines",name=m_ch+" (AUC="+str(round(res["auc"],3))+")",line=dict(color=C_CYBER,width=2)))
-        fig_roc.add_shape(type="line",x0=0,y0=0,x1=1,y1=1,line=dict(dash="dash",color="grey"))
-        fig_roc.update_layout(xaxis_title="False Positive Rate",yaxis_title="True Positive Rate",template=TPL,height=360)
-        st.plotly_chart(fig_roc,use_container_width=True)
-        note("How to read the ROC Curve","Curve hugging top-left = better model. Dashed diagonal = random guessing baseline.")
-    with rc2:
-        fig_cm=px.imshow(res["cm"],labels=dict(x="Predicted",y="Actual",color="Reports"),x=["Non-Cyber","Cyber"],y=["Non-Cyber","Cyber"],text_auto=True,color_continuous_scale="Blues",template=TPL,height=360)
-        st.plotly_chart(fig_cm,use_container_width=True)
-        note("How to read the Confusion Matrix","Top-left = correct Non-Cyber. Bottom-right = correct Cyber. Off-diagonal = errors.")
-    if m_ch=="Random Forest" and res.get("fi") is not None:
-        fig_fi=px.bar(res["fi"].sort_values("Importance"),x="Importance",y="Feature",orientation="h",template=TPL,height=520,color="Importance",color_continuous_scale="Blues")
-        fig_fi.update_layout(yaxis=dict(categoryorder="total ascending"),coloraxis_showscale=False); st.plotly_chart(fig_fi,use_container_width=True)
-        note("How to read Feature Importance","Higher bars = that feature contributes more to predicting cyber vs non-cyber. Engineered features (Impact_Score, Is_Special_Category) appearing high confirm they add predictive value.")
-    comp=[]
-    for k,v in model_results.items():
-        comp.append({"Model":k,"Accuracy":round(v["report"]["accuracy"],3),"Precision (Cyber)":round(v["report"].get("1",{}).get("precision",0),3),"Recall (Cyber)":round(v["report"].get("1",{}).get("recall",0),3),"F1 (Cyber)":round(v["report"].get("1",{}).get("f1-score",0),3),"ROC-AUC":round(v["auc"],3),"Best?":"✅" if k==best_name else ""})
-    st.dataframe(pd.DataFrame(comp),use_container_width=True,hide_index=True)
 
 # TAB 7 - RISK PREDICTOR
 with tabs[7]:
