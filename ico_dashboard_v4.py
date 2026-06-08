@@ -422,6 +422,13 @@ def compute_sector_tiers(df):
 df_full["Sector_Risk_Tier"] = compute_sector_tiers(df_full)
 
 @st.cache_resource(show_spinner=False)
+def get_model_results():
+    return train_models(df_full)
+
+model_results = get_model_results()
+best_name = max(model_results, key=lambda k: model_results[k]["auc"])
+
+@st.cache_resource(show_spinner=False)
 def train_models(df):
     data = df[df["Incident_Category"].isin(["Cyber","Non Cyber"])].copy()
     data["No_Data_Subjects_Affected"] = data["No_Data_Subjects_Affected"].astype(str)
