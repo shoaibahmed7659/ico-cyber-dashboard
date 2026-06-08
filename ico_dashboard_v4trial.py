@@ -469,6 +469,10 @@ def train_models(df):
         results[name] = entry
     return results
 
+model_results = train_models(df_full)
+best_name  = max(model_results,key=lambda k:model_results[k]["auc"])
+best_pipe  = model_results[best_name]["pipe"]
+
 def insights(df):
     if df.empty:
         return ["No data matches the current filters."]
@@ -537,7 +541,7 @@ tabs = st.tabs(["📊 Overview","📈 Trends","🏢 Sector Analysis","⚠️ Imp
                 "🧪 Feature Insights","🔍 Data Quality","🤖 Predictive Model",
                 "🔮 Risk Predictor","💡 Key Insights","📋 About the Data"])
 
-# --- TAB 0 — OVERVIEW ----------------------------------------------------------
+# ═══ TAB 0 — OVERVIEW ══════════════════════════════════════════════════════════
 with tabs[0]:
     if filtered.empty:
         st.warning("No data matches. Adjust sidebar filters.")
@@ -609,7 +613,7 @@ with tabs[0]:
         st.plotly_chart(fig_yoy,use_container_width=True)
         note("How to read this dual-axis chart","Bars (left axis) = absolute cyber breach count. Line (right axis) = cyber rate as % of all breaches that year. If both rise together, cyber is growing in both volume and share.")
 
-# --- TAB 1 — TRENDS ------------------------------------------------------------
+# ═══ TAB 1 — TRENDS ════════════════════════════════════════════════════════════
 with tabs[1]:
     st.markdown("### Breach Report Trends")
     st.info("This version uses full Q1–Q4 2025 data. All years are directly comparable.")
@@ -647,7 +651,7 @@ with tabs[1]:
             st.plotly_chart(fig_tt,use_container_width=True)
             note("How to read this chart","Each line = one breach type. Rising lines indicate that type is being reported more frequently over time.")
 
-# --- TAB 2 — SECTOR ANALYSIS ---------------------------------------------------
+# ═══ TAB 2 — SECTOR ANALYSIS ═══════════════════════════════════════════════════
 with tabs[2]:
     st.markdown("### Breach Reports by Sector")
     if not filtered.empty:
@@ -688,7 +692,7 @@ with tabs[2]:
             fig_dt.update_layout(yaxis=dict(categoryorder="total ascending")); st.plotly_chart(fig_dt,use_container_width=True)
             note("How to read this chart","Shows which personal data types are most frequently involved. Special category data (health, biometric etc.) carries UK GDPR Article 9 obligations.")
 
-# --- TAB 3 — IMPACT & SEVERITY -------------------------------------------------
+# ═══ TAB 3 — IMPACT & SEVERITY ═════════════════════════════════════════════════
 with tabs[3]:
     st.markdown("### Breach Impact & Severity Analysis")
     if not filtered.empty:
@@ -725,7 +729,7 @@ with tabs[3]:
             st.plotly_chart(fig_c,use_container_width=True)
             note("How to read this chart","Longer Period B bars = increase. Helps identify growing or declining breach types between periods.")
 
-# --- TAB 4 — FEATURE INSIGHTS --------------------------------------------------
+# ═══ TAB 4 — FEATURE INSIGHTS ══════════════════════════════════════════════════
 with tabs[4]:
     st.markdown("### Feature Engineering Insights")
     st.markdown("Patterns derived from engineered features — metrics constructed to reveal deeper analytical insights.")
@@ -762,7 +766,7 @@ with tabs[4]:
         fig_tm.update_layout(margin=dict(t=30,b=10)); st.plotly_chart(fig_tm,use_container_width=True)
         note("How to read this treemap","Area = volume of reports. Click a sector to drill down into its cyber/non-cyber split and regulatory outcomes.")
 
-# --- TAB 5 — DATA QUALITY ------------------------------------------------------
+# ═══ TAB 5 — DATA QUALITY ══════════════════════════════════════════════════════
 with tabs[5]:
     st.markdown("### Data Quality & Completeness")
     miss=df_full.isnull().sum().reset_index(); miss.columns=["Field","Missing Values"]
@@ -779,14 +783,9 @@ with tabs[5]:
         st.plotly_chart(fig_pv,use_container_width=True)
         note("How to read this heatmap","Darker = more reports in that combination. Cyber breaches in investigation cells suggests they attract more regulatory scrutiny.")
 
-# TAB 6 - PREDICTIVE MODEL
+# ═══ TAB 6 — PREDICTIVE MODEL ══════════════════════════════════════════════════
 with tabs[6]:
     st.markdown("### Predicting Breach Category: Cyber vs Non-Cyber")
-    @st.cache_resource(show_spinner=False)
-    def get_model_results():
-        return train_models(df_full)
-    model_results = get_model_results()
-    best_name  = max(model_results,key=lambda k:model_results[k]["auc"])
     m_ch=st.selectbox("Select model",list(model_results.keys()),key="mc")
     res=model_results[m_ch]; rep=res["report"]
     mc1,mc2,mc3,mc4=st.columns(4)
@@ -816,28 +815,8 @@ with tabs[6]:
     for k,v in model_results.items():
         comp.append({"Model":k,"Accuracy":round(v["report"]["accuracy"],3),"Precision (Cyber)":round(v["report"].get("1",{}).get("precision",0),3),"Recall (Cyber)":round(v["report"].get("1",{}).get("recall",0),3),"F1 (Cyber)":round(v["report"].get("1",{}).get("f1-score",0),3),"ROC-AUC":round(v["auc"],3),"Best?":"✅" if k==best_name else ""})
     st.dataframe(pd.DataFrame(comp),use_container_width=True,hide_index=True)
-    rc1,rc2=st.columns(2)
-    with rc1:
-        fig_roc=go.Figure()
-        fig_roc.add_trace(go.Scatter(x=res["fpr"],y=res["tpr"],mode="lines",name=m_ch+" (AUC="+str(round(res["auc"],3))+")",line=dict(color=C_CYBER,width=2)))
-        fig_roc.add_shape(type="line",x0=0,y0=0,x1=1,y1=1,line=dict(dash="dash",color="grey"))
-        fig_roc.update_layout(xaxis_title="False Positive Rate",yaxis_title="True Positive Rate",template=TPL,height=360)
-        st.plotly_chart(fig_roc,use_container_width=True)
-        note("How to read the ROC Curve","Curve hugging top-left = better model. Dashed diagonal = random guessing baseline.")
-    with rc2:
-        fig_cm=px.imshow(res["cm"],labels=dict(x="Predicted",y="Actual",color="Reports"),x=["Non-Cyber","Cyber"],y=["Non-Cyber","Cyber"],text_auto=True,color_continuous_scale="Blues",template=TPL,height=360)
-        st.plotly_chart(fig_cm,use_container_width=True)
-        note("How to read the Confusion Matrix","Top-left = correct Non-Cyber. Bottom-right = correct Cyber. Off-diagonal = errors.")
-    if m_ch=="Random Forest" and res.get("fi") is not None:
-        fig_fi=px.bar(res["fi"].sort_values("Importance"),x="Importance",y="Feature",orientation="h",template=TPL,height=520,color="Importance",color_continuous_scale="Blues")
-        fig_fi.update_layout(yaxis=dict(categoryorder="total ascending"),coloraxis_showscale=False); st.plotly_chart(fig_fi,use_container_width=True)
-        note("How to read Feature Importance","Higher bars = that feature contributes more to predicting cyber vs non-cyber. Engineered features (Impact_Score, Is_Special_Category) appearing high confirm they add predictive value.")
-    comp=[]
-    for k,v in model_results.items():
-        comp.append({"Model":k,"Accuracy":round(v["report"]["accuracy"],3),"Precision (Cyber)":round(v["report"].get("1",{}).get("precision",0),3),"Recall (Cyber)":round(v["report"].get("1",{}).get("recall",0),3),"F1 (Cyber)":round(v["report"].get("1",{}).get("f1-score",0),3),"ROC-AUC":round(v["auc"],3),"Best?":"✅" if k==best_name else ""})
-    st.dataframe(pd.DataFrame(comp),use_container_width=True,hide_index=True)
 
-# TAB 7 - RISK PREDICTOR
+# ═══ TAB 7 — RISK PREDICTOR ════════════════════════════════════════════════════
 with tabs[7]:
     st.markdown("### Cyber Breach Risk Estimator")
     st.markdown("Model: **"+best_name+"** (ROC-AUC = "+str(round(model_results[best_name]["auc"],3))+")")
@@ -873,7 +852,7 @@ with tabs[7]:
             msg="Predicted: **"+label+"**  \nCyber probability: **"+pct_s+"**  \nSeverity Score: **"+str(sev_s)+" / 11**  \nSpecial category data: **"+("Yes" if is_sc else "No")+"**  \nModel: "+best_name
             (st.error if label=="Cyber" else st.success)(msg)
 
-# TAB 8 - KEY INSIGHTS
+# ═══ TAB 8 — KEY INSIGHTS ══════════════════════════════════════════════════════
 with tabs[8]:
     st.markdown("### Key Findings")
     if filtered.empty:
@@ -900,7 +879,7 @@ with tabs[8]:
             except Exception as e:
                 st.error("Excel export failed: "+str(e))
 
-# TAB 9 - ABOUT THE DATA
+# ═══ TAB 9 — ABOUT THE DATA ════════════════════════════════════════════════════
 with tabs[9]:
     st.markdown("### About This Dashboard & the Underlying Data")
     st.markdown("""
