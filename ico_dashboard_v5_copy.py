@@ -1,3 +1,4 @@
+import pathlib
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -14,6 +15,7 @@ from sklearn.metrics import classification_report, roc_auc_score, roc_curve, con
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
+import pathlib
 
 # ── PAGE CONFIG ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -58,326 +60,6 @@ def kpi(label, value, sub=""):
             '<div class="kpi-value">'+str(value)+'</div>'
             '<div class="kpi-sub">'+sub+'</div></div>')
 
-# ── EXCEL EXPORT FUNCTION ──────────────────────────────────────────────────────
-def build_excel_export(df_export):
-    from openpyxl import Workbook as _WB
-    from openpyxl.styles import Font as _F, PatternFill as _PF, Alignment as _A, Border as _B, Side as _S
-    from openpyxl.utils import get_column_letter as _gcl
-    from openpyxl.formatting.rule import ColorScaleRule as _CSR, DataBarRule as _DBR
-    from openpyxl.worksheet.table import Table as _T, TableStyleInfo as _TSI
-    from openpyxl.worksheet.hyperlink import Hyperlink as _H
-    from io import BytesIO as _IO
-    from datetime import datetime as _dt
-
-    NAVY="0F2540";TEAL="0E7C7B";SLATE="2C3E50";PURPLE="6C3483"
-    AMBER="D68910";WHITE="FFFFFF";LBG="F4F6F8";CYAN="D6EAF8"
-    GREEN="D5F5E3";RED="FADBD8";AMB="FDEBD0";PUR="E8DAEF";GBD="BDC3C7"
-
-    def _fnt(bold=False,size=11,color="000000",italic=False):
-        return _F(name="Calibri",bold=bold,size=size,color=color,italic=italic)
-    def _fl(c): return _PF("solid",fgColor=c)
-    def _ctr(): return _A(horizontal="center",vertical="center",wrap_text=True)
-    def _lft(): return _A(horizontal="left",vertical="center",wrap_text=True,indent=1)
-    def _rgt(): return _A(horizontal="right",vertical="center")
-    def _thin():
-        s=_S(style="thin",color=GBD); return _B(left=s,right=s,top=s,bottom=s)
-    def _thickb():
-        t=_S(style="medium",color=NAVY); n=_S(style="thin",color=GBD)
-        return _B(left=n,right=n,top=n,bottom=t)
-    def _hdr(cell,bg=NAVY,fg=WHITE,sz=11):
-        cell.font=_fnt(bold=True,size=sz,color=fg);cell.fill=_fl(bg)
-        cell.alignment=_ctr();cell.border=_thickb()
-    def _sec(ws,row,c1,c2,text,bg=TEAL,fg=WHITE,sz=11):
-        ws.merge_cells(start_row=row,start_column=c1,end_row=row,end_column=c2)
-        cell=ws.cell(row=row,column=c1,value=text)
-        cell.font=_fnt(bold=True,size=sz,color=fg);cell.fill=_fl(bg)
-        cell.alignment=_A(horizontal="left",vertical="center",indent=2)
-        ws.row_dimensions[row].height=26
-    def _aw(ws,ci,mn=10,mx=38,ex=2):
-        ml=0
-        for row in ws.iter_rows(min_col=ci,max_col=ci):
-            for c in row:
-                if c.value: ml=max(ml,len(str(c.value)))
-        ws.column_dimensions[_gcl(ci)].width=min(max(ml+ex,mn),mx)
-
-    RAW_C=['BI_Reference','Year','Quarter','Sector','Data_Subject_Type','Data_Type',
-           'Incident_Category','Incident_Type','Decision_Taken',
-           'No_Data_Subjects_Affected','Time_Taken_to_Report']
-    ENG_C=['Is_Cyber','Is_High_Impact','Impact_Score','Is_Special_Category',
-           'Within_72hrs','Severity_Score','Sector_Risk_Tier']
-    ALL_C=RAW_C+ENG_C
-    CDN={'BI_Reference':'Breach ID','Year':'Year','Quarter':'Quarter','Sector':'Sector',
-         'Data_Subject_Type':'Data Subjects','Data_Type':'Data Category',
-         'Incident_Category':'Breach Category','Incident_Type':'Breach Type',
-         'Decision_Taken':'ICO Decision','No_Data_Subjects_Affected':'People Affected',
-         'Time_Taken_to_Report':'Reporting Time','Is_Cyber':'Is Cyber? (0/1)',
-         'Is_High_Impact':'High Impact? (0/1)','Impact_Score':'Impact Score (1-6)',
-         'Is_Special_Category':'Special Category? (0/1)','Within_72hrs':'Within 72hrs? (0/1)',
-         'Severity_Score':'Severity Score (0-11)','Sector_Risk_Tier':'Sector Risk Tier'}
-
-    wb=_WB()
-
-    # Sheet 1: Overview
-    ws0=wb.active;ws0.title="Overview";ws0.sheet_view.showGridLines=False
-    for col,w in [("A",3),("B",38),("C",22),("D",50)]: ws0.column_dimensions[col].width=w
-    ws0.merge_cells("B2:D2")
-    c=ws0["B2"];c.value="ICO Data Security Incident Explorer"
-    c.font=_F(name="Calibri",bold=True,size=20,color=WHITE);c.fill=_fl(NAVY)
-    c.alignment=_A(horizontal="left",vertical="center",indent=2);ws0.row_dimensions[2].height=48
-    ws0.merge_cells("B3:D3")
-    c2=ws0["B3"];c2.value="Personal data breach analysis  |  UK ICO  |  2019 - Q4 2025"
-    c2.font=_F(name="Calibri",size=11,color="AABCD0",italic=True);c2.fill=_fl(NAVY)
-    c2.alignment=_A(horizontal="left",vertical="center",indent=2);ws0.row_dimensions[3].height=22
-    ws0.row_dimensions[4].height=10
-    _sec(ws0,5,2,4,"  WORKBOOK CONTENTS",NAVY,WHITE,12)
-    for ci,h in enumerate(["Sheet","Contents","Description"],2):
-        _hdr(ws0.cell(6,ci,h),bg=TEAL);ws0.row_dimensions[6].height=22
-    idx=[("Data","Filtered breach data","Raw + engineered columns, Excel Table, conditional formatting"),
-         ("Dictionary","Field definitions","All 18 columns with ICO / UK GDPR definitions"),
-         ("Methods","Cleaning and engineering","Step-by-step methods with Python code"),
-         ("Stats","Summary statistics","KPIs, year breakdown, top sectors")]
-    for ri,(sh,ct,desc) in enumerate(idx,7):
-        bg=LBG if ri%2==0 else WHITE
-        for ci,val in enumerate([sh,ct,desc],2):
-            c=ws0.cell(ri,ci,val);c.fill=_fl(bg);c.font=_fnt(size=10)
-            c.alignment=_lft();c.border=_thin()
-        lnk=ws0.cell(ri,2)
-        lnk.hyperlink=_H(ref=lnk.coordinate,location=f"'{sh}'!A1")
-        lnk.font=_F(name="Calibri",size=10,color="1A5276",underline="single")
-        ws0.row_dimensions[ri].height=20
-    ws0.row_dimensions[11].height=10
-    _sec(ws0,12,2,4,"  SOURCE AND DISCLAIMER",SLATE,WHITE,11)
-    for ri,(lbl,val) in enumerate([
-        ("Source","UK Information Commissioner's Office - ico.org.uk"),
-        ("Dataset","Data Security Incident Trends (2019 - Q4 2025)"),
-        ("Generated",_dt.now().strftime("%d %B %Y, %H:%M")),
-        ("Disclaimer","Engineered features are analytical constructs; not ICO classifications."),
-        ("Reporting","ico.org.uk/for-organisations/report-a-breach/")],13):
-        bg=LBG if ri%2==0 else WHITE
-        c1=ws0.cell(ri,2,lbl);c1.font=_fnt(bold=True,size=10,color=NAVY)
-        c1.fill=_fl(bg);c1.alignment=_lft();c1.border=_thin()
-        ws0.merge_cells(start_row=ri,start_column=3,end_row=ri,end_column=4)
-        c2=ws0.cell(ri,3,val);c2.font=_fnt(size=10);c2.fill=_fl(WHITE)
-        c2.alignment=_lft();c2.border=_thin();ws0.row_dimensions[ri].height=20
-
-    # Sheet 2: Data
-    ws1=wb.create_sheet("Data");ws1.sheet_view.showGridLines=False
-    avail=[c for c in ALL_C if c in df_export.columns]
-    ws1.merge_cells(f"A1:{_gcl(len(avail))}1")
-    c=ws1.cell(1,1,"ICO Breach Data - Filtered Export with Engineered Features")
-    c.font=_F(name="Calibri",bold=True,size=13,color=WHITE);c.fill=_fl(NAVY)
-    c.alignment=_A(horizontal="left",vertical="center",indent=2);ws1.row_dimensions[1].height=30
-    raw_avail=[x for x in avail if x in RAW_C]
-    eng_avail=[x for x in avail if x in ENG_C]
-    if raw_avail:
-        ws1.merge_cells(start_row=2,start_column=1,end_row=2,end_column=len(raw_avail))
-        r=ws1.cell(2,1,"  ORIGINAL ICO FIELDS")
-        r.font=_fnt(bold=True,size=10,color=WHITE);r.fill=_fl(SLATE)
-        r.alignment=_A(horizontal="left",vertical="center",indent=1);ws1.row_dimensions[2].height=20
-    if eng_avail:
-        ws1.merge_cells(start_row=2,start_column=len(raw_avail)+1,end_row=2,end_column=len(avail))
-        r2=ws1.cell(2,len(raw_avail)+1,"  ENGINEERED FEATURES - derived by this dashboard")
-        r2.font=_fnt(bold=True,size=10,color=WHITE);r2.fill=_fl(PURPLE)
-        r2.alignment=_A(horizontal="left",vertical="center",indent=1)
-    for ci,col in enumerate(avail,1):
-        c=ws1.cell(3,ci,CDN.get(col,col))
-        bg=TEAL if col in RAW_C else PURPLE
-        c.font=_fnt(bold=True,size=10,color=WHITE);c.fill=_fl(bg)
-        c.alignment=_ctr();c.border=_thickb()
-    ws1.row_dimensions[3].height=22
-    num_c={'Is_Cyber','Is_High_Impact','Impact_Score','Is_Special_Category','Within_72hrs','Severity_Score','Year'}
-    tier_c={"High":RED,"Medium":AMB,"Low":GREEN}
-    cat_c={"Cyber":RED,"Non Cyber":CYAN}
-    for ri,(idx,row) in enumerate(df_export[avail].iterrows(),4):
-        rbg=LBG if ri%2==0 else WHITE
-        for ci,col in enumerate(avail,1):
-            val=row[col]
-            c=ws1.cell(ri,ci,val)
-            if col=="Incident_Category": c.fill=_fl(cat_c.get(str(val),rbg))
-            elif col=="Sector_Risk_Tier": c.fill=_fl(tier_c.get(str(val),rbg))
-            else: c.fill=_fl(rbg)
-            c.font=_fnt(size=10)
-            c.alignment=_rgt() if col in num_c else _lft()
-            c.border=_thin()
-        ws1.row_dimensions[ri].height=16
-    ws1.freeze_panes="A4"
-    ldr=3+len(df_export);lcl=_gcl(len(avail))
-    try:
-        t=_T(displayName="ICOData",ref=f"A3:{lcl}{ldr}")
-        t.tableStyleInfo=_TSI(name="TableStyleMedium9",showRowStripes=True)
-        ws1.add_table(t)
-    except Exception:
-        pass
-    if "Severity_Score" in avail:
-        sci=avail.index("Severity_Score")+1;sl=_gcl(sci)
-        ws1.conditional_formatting.add(f"{sl}4:{sl}{ldr}",_CSR(
-            start_type="min",start_color="63BE7B",
-            mid_type="percentile",mid_value=50,mid_color="FFEB84",
-            end_type="max",end_color="F8696B"))
-    if "Impact_Score" in avail:
-        ii=avail.index("Impact_Score")+1;il=_gcl(ii)
-        ws1.conditional_formatting.add(f"{il}4:{il}{ldr}",_DBR(start_type="min",end_type="max",color="4472C4"))
-    for ci in range(1,len(avail)+1): _aw(ws1,ci)
-
-    # Sheet 3: Dictionary
-    ws2=wb.create_sheet("Dictionary");ws2.sheet_view.showGridLines=False
-    for col,w in [("A",3),("B",22),("C",26),("D",50),("E",14),("F",28),("G",46),("H",22)]:
-        ws2.column_dimensions[col].width=w
-    ws2.merge_cells("B2:H2")
-    c=ws2.cell(2,2,"Data Dictionary - Field Definitions and UK GDPR Context")
-    c.font=_fnt(bold=True,size=15,color=WHITE);c.fill=_fl(NAVY)
-    c.alignment=_A(horizontal="left",vertical="center",indent=2);ws2.row_dimensions[2].height=38
-    DH=["Internal Name","Display Name","Definition","Data Type","Example Values","Notes","Source"]
-    _sec(ws2,4,2,8,"  ORIGINAL ICO FIELDS",TEAL,WHITE,11)
-    for ci,h in enumerate(DH,2): _hdr(ws2.cell(5,ci,h),bg=TEAL); ws2.row_dimensions[5].height=22
-    or2=[
-        ("BI_Reference","Breach ID","Unique reference per breach report.","Text","BI1, BI100","Anonymised.","ICO dataset"),
-        ("Year","Year","Calendar year of notification.","Integer","2019-2025","Notification year.","ICO dataset"),
-        ("Quarter","Quarter","Qtr1=Jan-Mar, Qtr2=Apr-Jun, Qtr3=Jul-Sep, Qtr4=Oct-Dec.","Text","Qtr 1","Not incident quarter.","ICO dataset"),
-        ("Sector","Sector","Reporting organisation sector per ICO classification.","Text","Health, Legal","Labelling varied historically.","ICO Glossary"),
-        ("Data_Subject_Type","Data Subjects","Category of affected individuals (UK GDPR Art.4).","Text","Customers","One breach may have multiple rows.","UK GDPR Art.4(1)"),
-        ("Data_Type","Data Category","Type of personal data. Art.9 = stricter obligations.","Text","Health data","Special category triggers Art.9.","UK GDPR Art.9"),
-        ("Incident_Category","Breach Category","ICO typology: Cyber (malicious) or Non Cyber.","Text","Cyber","ICO internal classification.","ICO Glossary"),
-        ("Incident_Type","Breach Type","Specific mechanism (ransomware, wrong recipient, etc.).","Text","Ransomware","Most granular breach description.","ICO Glossary"),
-        ("Decision_Taken","ICO Decision","Regulatory response after harm risk assessment.","Text","No Further Action","Reflects ICO enforcement approach.","ICO Guidance"),
-        ("No_Data_Subjects_Affected","People Affected","Estimated affected individuals as banded range.","Text (ordinal)","1 to 9","Estimate at notification.","UK GDPR Art.33"),
-        ("Time_Taken_to_Report","Reporting Time","Hours from discovery to ICO notification.","Text","0 to 24 hours","Art.33 requires max 72hrs.","UK GDPR Art.33"),
-    ]
-    for ri,row in enumerate(or2,6):
-        bg=LBG if ri%2==0 else WHITE
-        for ci,val in enumerate(row,2):
-            c=ws2.cell(ri,ci,val);c.fill=_fl(bg);c.font=_fnt(size=10)
-            c.alignment=_A(horizontal="left",vertical="center",wrap_text=True,indent=1);c.border=_thin()
-        ws2.row_dimensions[ri].height=40
-    es=6+len(or2)+2;_sec(ws2,es,2,8,"  ENGINEERED FEATURES",PURPLE,WHITE,11)
-    for ci,h in enumerate(DH,2): _hdr(ws2.cell(es+1,ci,h),bg=PURPLE); ws2.row_dimensions[es+1].height=22
-    en2=[
-        ("Is_Cyber","Is Cyber? (0/1)","1 if Incident_Category == Cyber.","Integer (0/1)","0, 1","Enables numeric ops.","Derived"),
-        ("Is_High_Impact","High Impact? (0/1)","1 if People Affected >= 1,000.","Integer (0/1)","0, 1","Art.33(3) high-risk threshold.","Derived / UK GDPR Art.33"),
-        ("Impact_Score","Impact Score (1-6)","Ordinal: 1-to-9=1 through Over-100k=6.","Integer (1-6)","1, 3, 6","Numeric proxy for scale.","Derived"),
-        ("Is_Special_Category","Special Category? (0/1)","1 if Data_Type contains Art.9 keyword.","Integer (0/1)","0, 1","Health/biometric/racial/political data.","Derived / UK GDPR Art.9"),
-        ("Within_72hrs","Within 72hrs? (0/1)","1 if reported within 72hrs.","Integer (0/1)","0, 1","Art.33 compliance signal.","Derived / UK GDPR Art.33"),
-        ("Severity_Score","Severity Score (0-11)","Is_Cyber*3 + Impact_Score + Is_Special_Category*2.","Integer (0-11)","0, 5, 11","Composite risk. Not an ICO metric.","Derived"),
-        ("Sector_Risk_Tier","Sector Risk Tier","Cyber rates ranked into High/Medium/Low tertiles.","Text","High, Medium, Low","Relative. Not an ICO designation.","Derived"),
-    ]
-    for ri,row in enumerate(en2,es+2):
-        bg=PUR if ri%2==0 else WHITE
-        for ci,val in enumerate(row,2):
-            c=ws2.cell(ri,ci,val);c.fill=_fl(bg);c.font=_fnt(size=10)
-            c.alignment=_A(horizontal="left",vertical="center",wrap_text=True,indent=1);c.border=_thin()
-        ws2.row_dimensions[ri].height=42
-    ws2.freeze_panes="B6"
-
-    # Sheet 4: Methods
-    ws3=wb.create_sheet("Methods");ws3.sheet_view.showGridLines=False
-    for col,w in [("A",3),("B",24),("C",50),("D",38),("E",28)]: ws3.column_dimensions[col].width=w
-    ws3.merge_cells("B2:E2")
-    c=ws3.cell(2,2,"Data Cleaning and Feature Engineering - Methods Reference")
-    c.font=_fnt(bold=True,size=15,color=WHITE);c.fill=_fl(NAVY)
-    c.alignment=_A(horizontal="left",vertical="center",indent=2);ws3.row_dimensions[2].height=38
-    MH=["Step / Feature","What was done","Python technique","Why it matters"]
-    _sec(ws3,4,2,5,"  DATA CLEANING STEPS",TEAL,WHITE,11)
-    for ci,h in enumerate(MH,2): _hdr(ws3.cell(5,ci,h),bg=TEAL); ws3.row_dimensions[5].height=22
-    cl=[
-        ("1. Column renaming","Column names stripped and renamed to snake_case.",
-         "df.columns=[c.strip() for c in df.columns]; df.rename(columns={...})","Prevents key errors. Standard for production pipelines."),
-        ("2. Whitespace trimming","Leading/trailing spaces removed from text fields.",
-         "df[col].str.strip() at load time","ICO exports sometimes contain trailing spaces."),
-        ("3. Ordinal encoding","People Affected converted to ordered Categorical.",
-         "pd.Categorical(col,categories=bands,ordered=True)","Without ordering, charts sort alphabetically."),
-        ("4. Date construction","Date column built from Year + Quarter midpoint month.",
-         "q_map={'Qtr 1':2,'Qtr 2':5,'Qtr 3':8,'Qtr 4':11}; pd.to_datetime(yr+'-'+mo+'-01')","Raw data has no date field."),
-        ("5. Missing value handling","No imputation on original fields. Blanks preserved.",
-         "df.isnull().sum() displayed in dashboard. No fillna() on originals.","Imputing without domain knowledge introduces bias."),
-        ("6. 2025 annotation","Full Q1-Q4 2025 data included. Annotated in trend charts.",
-         "Expander notes in Trends and Data Quality tabs.","Prevents misreading of year-on-year comparisons."),
-        ("7. No deduplication","One breach = multiple rows per data subject type. Preserved.",
-         "No df.drop_duplicates(). Intentional design.","Deduplicating would lose data type granularity."),
-    ]
-    for ri,row in enumerate(cl,6):
-        bg=LBG if ri%2==0 else WHITE
-        for ci,val in enumerate(row,2):
-            c=ws3.cell(ri,ci,val);c.fill=_fl(bg);c.font=_fnt(size=10)
-            c.alignment=_A(horizontal="left",vertical="center",wrap_text=True,indent=1);c.border=_thin()
-        ws3.row_dimensions[ri].height=54
-    fs=6+len(cl)+2;_sec(ws3,fs,2,5,"  FEATURE ENGINEERING METHODS",PURPLE,WHITE,11)
-    for ci,h in enumerate(["Feature","Construction method","Python code","Analytical purpose"],2):
-        _hdr(ws3.cell(fs+1,ci,h),bg=PURPLE); ws3.row_dimensions[fs+1].height=22
-    fe=[
-        ("Is_Cyber","Binary flag from ICO Incident_Category.","(df['Incident_Category']=='Cyber').astype(int)","Enables KPI calculation and model target."),
-        ("Is_High_Impact","Binary: 1 if People Affected >= 1,000.","df['No_Data_Subjects_Affected'].isin(['1k to 10k','10k to 100k','Over 100k']).astype(int)","Flags Art.33(3) high-risk breaches."),
-        ("Impact_Score","Ordinal 1-6 from band strings.","band_score={'1 to 9':1,...,'Over 100k':6}; df['No_Data_Subjects_Affected'].map(band_score)","Numeric proxy for impact scale."),
-        ("Is_Special_Category","Keyword scan for UK GDPR Art.9 categories.","keywords=['health','racial','ethnic','biometric','genetic','sexual','religion','political','criminal']; df['Data_Type'].str.lower().apply(lambda x:int(any(k in x for k in keywords)))","Flags highest regulatory risk data."),
-        ("Within_72hrs","Parse time field for compliance signals.","df['Time_Taken_to_Report'].str.lower().apply(lambda x:1 if any(t in x for t in ['0 to 24','24 to 48','48 to 72']) else 0)","UK GDPR Art.33 compliance signal."),
-        ("Severity_Score","Composite 3-dimension risk metric.","df['Is_Cyber']*3 + df['Impact_Score'] + df['Is_Special_Category']*2","Range 0-11. Higher = more potentially harmful."),
-        ("Sector_Risk_Tier","Sector cyber rates ranked into tertiles.","rate=df.groupby('Sector')['Is_Cyber'].mean(); q33,q66=rate.quantile(0.33),rate.quantile(0.66)","Relative risk tier. Not ICO-designated."),
-    ]
-    for ri,row in enumerate(fe,fs+2):
-        bg=PUR if ri%2==0 else WHITE
-        for ci,val in enumerate(row,2):
-            c=ws3.cell(ri,ci,val);c.fill=_fl(bg);c.font=_fnt(size=10)
-            c.alignment=_A(horizontal="left",vertical="center",wrap_text=True,indent=1);c.border=_thin()
-        ws3.row_dimensions[ri].height=62
-    ws3.freeze_panes="B6"
-
-    # Sheet 5: Stats
-    ws4=wb.create_sheet("Stats");ws4.sheet_view.showGridLines=False
-    for col,w in [("A",3),("B",34),("C",20),("D",16),("E",36),("F",18)]: ws4.column_dimensions[col].width=w
-    ws4.merge_cells("B2:F2")
-    c=ws4.cell(2,2,"Summary Statistics - ICO Breach Data (Filtered Selection)")
-    c.font=_fnt(bold=True,size=15,color=WHITE);c.fill=_fl(NAVY)
-    c.alignment=_A(horizontal="left",vertical="center",indent=2);ws4.row_dimensions[2].height=38
-    _sec(ws4,4,2,6,"  KEY PERFORMANCE INDICATORS",TEAL,WHITE,11)
-    for ci,h in enumerate(["Metric","Value","Format","Interpretation","Source"],2):
-        _hdr(ws4.cell(5,ci,h),bg=TEAL); ws4.row_dimensions[5].height=22
-    ic=df_export["Is_Cyber"] if "Is_Cyber" in df_export.columns else pd.Series([0]*len(df_export))
-    hi=df_export["Is_High_Impact"] if "Is_High_Impact" in df_export.columns else pd.Series([0]*len(df_export))
-    sv=df_export["Severity_Score"] if "Severity_Score" in df_export.columns else pd.Series([0]*len(df_export))
-    # im (Impact_Score) field available for future KPI rows if needed
-    sc_f=df_export["Is_Special_Category"] if "Is_Special_Category" in df_export.columns else pd.Series([0]*len(df_export))
-    w7=df_export["Within_72hrs"] if "Within_72hrs" in df_export.columns else pd.Series([0]*len(df_export))
-    st_c=df_export["Sector"] if "Sector" in df_export.columns else pd.Series(["Unknown"]*len(df_export))
-    yr_c=df_export["Year"] if "Year" in df_export.columns else pd.Series([0]*len(df_export))
-    srt=df_export["Sector_Risk_Tier"] if "Sector_Risk_Tier" in df_export.columns else pd.Series(["Low"]*len(df_export))
-    kps=[
-        ("Total Breach Reports",len(df_export),"#,##0","All rows in this filtered export","ICO dataset"),
-        ("Cyber Breaches",int(ic.sum()),"#,##0","ICO-classified as cyber origin","Derived: Is_Cyber"),
-        ("Cyber Breach Rate",round(float(ic.mean()),4),"0.0%","34% is the full-dataset average","Derived: Is_Cyber"),
-        ("High-Impact Breaches",int(hi.sum()),"#,##0","Affected 1,000+ individuals","Derived: Is_High_Impact"),
-        ("Avg. Severity Score",round(float(sv.mean()),2),"0.00","Scale 0-11","Derived: Severity_Score"),
-        ("Special Category Breaches",int(sc_f.sum()),"#,##0","UK GDPR Art.9 data involved","Derived: Is_Special_Category"),
-        ("Within 72hrs (rate)",round(float(w7.mean()),4),"0.0%","Art.33 compliance signal","Derived: Within_72hrs"),
-        ("Sectors represented",int(st_c.nunique()),"0","Unique sectors in selection","ICO dataset"),
-        ("High-Risk Sectors",int((srt=="High").sum()),"0","Top tertile by cyber rate","Derived: Sector_Risk_Tier"),
-        ("Years covered",str(int(yr_c.min()))+" to "+str(int(yr_c.max())),"@","Date range of filtered data","ICO dataset"),
-    ]
-    for ri,(lbl,val,fmt,interp,src) in enumerate(kps,6):
-        bg=LBG if ri%2==0 else WHITE
-        c1=ws4.cell(ri,2,lbl);c1.font=_fnt(bold=True,size=10);c1.fill=_fl(bg);c1.alignment=_lft();c1.border=_thin()
-        c2=ws4.cell(ri,3,val);c2.number_format=fmt
-        c2.font=_fnt(bold=True,size=11,color=NAVY);c2.fill=_fl(CYAN if ri%2==0 else "EBF5FB")
-        c2.alignment=_ctr();c2.border=_thin()
-        c3=ws4.cell(ri,4,fmt.replace("@","Text").replace("#,##0","Integer").replace("0.0%","Pct").replace("0.00","Decimal"))
-        c3.font=_fnt(size=10);c3.fill=_fl(bg);c3.alignment=_ctr();c3.border=_thin()
-        c4=ws4.cell(ri,5,interp);c4.font=_fnt(size=10);c4.fill=_fl(bg)
-        c4.alignment=_A(horizontal="left",vertical="center",wrap_text=True,indent=1);c4.border=_thin()
-        c5=ws4.cell(ri,6,src);c5.font=_fnt(size=10,italic=True);c5.fill=_fl(bg);c5.alignment=_ctr();c5.border=_thin()
-        ws4.row_dimensions[ri].height=22
-    if "Year" in df_export.columns and "Is_Cyber" in df_export.columns:
-        ys=6+len(kps)+3;_sec(ws4,ys,2,6,"  BREACH REPORTS BY YEAR",AMBER,WHITE,11)
-        for ci,h in enumerate(["Year","Total","Cyber","Non-Cyber","Cyber Rate"],2):
-            _hdr(ws4.cell(ys+1,ci,h),bg=AMBER); ws4.row_dimensions[ys+1].height=22
-        yg=df_export.groupby("Year").agg(T=("Is_Cyber","count"),C=("Is_Cyber","sum"),N=("Is_Cyber",lambda x:(x==0).sum())).reset_index()
-        yg["R"]=yg["C"]/yg["T"]
-        for ri,(idx_r,row) in enumerate(yg.iterrows(),ys+2):
-            bg=AMB if ri%2==0 else WHITE
-            for ci,(val,fmt) in enumerate([(int(row["Year"]),"0"),(int(row["T"]),"#,##0"),(int(row["C"]),"#,##0"),(int(row["N"]),"#,##0"),(row["R"],"0.0%")],2):
-                c=ws4.cell(ri,ci,val);c.number_format=fmt;c.fill=_fl(bg)
-                c.font=_fnt(size=10);c.alignment=_ctr();c.border=_thin()
-            ws4.row_dimensions[ri].height=18
-    ws4.freeze_panes="B6"
-
-    buf=_IO();wb.save(buf);buf.seek(0);return buf.getvalue()
 
 # ── LOAD + FEATURE ENGINEER ────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
@@ -872,17 +554,21 @@ with tabs[8]:
         st.plotly_chart(fig_dec,use_container_width=True,key="chart_26")
         note("How to read this chart","If cyber breaches more frequently result in 'Investigation Pursued', this aligns with ICO guidance that cyber breaches carry higher risk of harm to individuals.")
         st.markdown("---")
-        st.markdown("#### Download filtered data")
-        dl1,dl2=st.columns(2)
-        with dl1:
-            csv_bytes=filtered.to_csv(index=False).encode("utf-8")
-            st.download_button("⬇️  Download as CSV",csv_bytes,"ico_breach_data_filtered.csv","text/csv",use_container_width=True,help="Plain CSV with all columns including engineered features.")
-        with dl2:
-            try:
-                excel_bytes=build_excel_export(filtered)
-                st.download_button("📊  Download as Excel (styled workbook)",excel_bytes,"ICO_Breach_Data_Export.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",use_container_width=True,help="5-sheet Excel: Data · Dictionary · Methods · Summary Stats · Overview.")
-            except Exception as e:
-                st.error("Excel export failed: "+str(e))
+        st.markdown("#### Download pre-built filtered dataset")
+        csv_path = pathlib.Path("ico_breach_data_filtered.csv")  # repo root path
+        if csv_path.exists():
+            with open(csv_path, "rb") as f:
+                csv_bytes = f.read()
+            st.download_button(
+                "⬇️  Download filtered CSV",
+                csv_bytes,
+                file_name=csv_path.name,
+                mime="text/csv",
+                use_container_width=True,
+                help="Static filtered CSV generated offline and stored in the repo."
+            )
+        else:
+            st.info("Filtered CSV file not found in app folder. Please upload ico_breach_data_filtered.csv.")
 
 # TAB 9 - ABOUT THE DATA
 with tabs[9]:
