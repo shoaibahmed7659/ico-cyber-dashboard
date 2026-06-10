@@ -1,0 +1,15 @@
+# Native Streamlit theme — version-stable, no fragile DOM-selector CSS needed.
+[theme]
+base = "light"                      # force light mode (ignore the viewer's system dark mode)
+primaryColor = "#4f46e5"            # institutional indigo accent
+backgroundColor = "#ffffff"         # clean page
+secondaryBackgroundColor = "#f5f6fa" # sidebar + widget surfaces
+textColor = "#0f172a"               # near-black ink for high contrast
+font = "sans serif"
+
+[client]
+showErrorDetails = "none"           # users see a clean message, full trace stays in logs
+
+[server]
+# Lightweight defaults for the free Community Cloud tier
+maxUploadSize = 50
