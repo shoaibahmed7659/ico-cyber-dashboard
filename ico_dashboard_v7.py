@@ -220,7 +220,7 @@ def train_models(df: pd.DataFrame):
     # cyber/non-cyber balance) — metrics are virtually unchanged at this size,
     # and the full dataset still powers every chart, KPI and the predictor inputs.
     full_n = len(data)
-    MAX_TRAIN = 40000
+    MAX_TRAIN = 25000
     if full_n > MAX_TRAIN:
         data = data.groupby("Is_Cyber", group_keys=False).sample(frac=MAX_TRAIN / full_n, random_state=42)
     train_n = len(data)
@@ -249,21 +249,21 @@ def train_models(df: pd.DataFrame):
     clfs = [
         ("Logistic Regression", LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42)),
         ("Random Forest",       RandomForestClassifier(n_estimators=100, max_depth=10,
-                                                        class_weight="balanced", random_state=42, n_jobs=-1)),
+                                                        class_weight="balanced", random_state=42, n_jobs=1)),
         ("Gradient Boosting",   GradientBoostingClassifier(n_estimators=80, max_depth=3, random_state=42)),
     ]
     cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
     results = {}
     for name, clf in clfs:
         pipe = Pipeline([("preproc", preproc), ("clf", clf)])
-        cv_auc = cross_val_score(pipe, Xtr, ytr, cv=cv, scoring="roc_auc", n_jobs=-1)
+        cv_auc = cross_val_score(pipe, Xtr, ytr, cv=cv, scoring="roc_auc", n_jobs=1)
         pipe.fit(Xtr, ytr)
         yp, yprob = pipe.predict(Xte), pipe.predict_proba(Xte)[:, 1]
         rep = classification_report(yte, yp, output_dict=True, zero_division=0)
         fpr, tpr, _ = roc_curve(yte, yprob)
         try:
-            perm = permutation_importance(pipe, Xte, yte, n_repeats=2,
-                                          random_state=42, scoring="roc_auc", n_jobs=-1)
+            perm = permutation_importance(pipe, Xte, yte, n_repeats=1,
+                                          random_state=42, scoring="roc_auc", n_jobs=1)
             pi = (pd.DataFrame({"Feature": feats, "Importance": perm.importances_mean})
                     .sort_values("Importance", ascending=False))
         except Exception:
