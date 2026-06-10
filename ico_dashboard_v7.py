@@ -100,6 +100,11 @@ def cap(text):
     """Concise inline reading-note under a chart (reading + why it matters)."""
     st.markdown('<div class="note">' + text + '</div>', unsafe_allow_html=True)
 
+def lead(text):
+    """Plain-English description shown under a heading, above its chart."""
+    st.markdown('<div style="color:#334155;font-size:.92rem;line-height:1.55;margin:.1rem 0 .55rem;">'
+                + text + '</div>', unsafe_allow_html=True)
+
 def kpi(label, value, sub="", tone="accent"):
     cls = "kpi" if tone == "accent" else "kpi " + tone
     return ('<div class="' + cls + '"><div class="l">' + label + '</div><div class="v">' +
@@ -209,6 +214,17 @@ if df_full is None or df_full.empty:
 # ════════════════════════════════════════════════════════════════════════════════
 def train_models(df: pd.DataFrame):
     data = df[df["Incident_Category"].isin(["Cyber", "Non Cyber"])].copy()
+
+    # Free hosting tier has limited RAM, and a dense one-hot matrix on the full
+    # dataset can exhaust it. Train on a stratified sample (preserving the
+    # cyber/non-cyber balance) — metrics are virtually unchanged at this size,
+    # and the full dataset still powers every chart, KPI and the predictor inputs.
+    full_n = len(data)
+    MAX_TRAIN = 40000
+    if full_n > MAX_TRAIN:
+        data = data.groupby("Is_Cyber", group_keys=False).sample(frac=MAX_TRAIN / full_n, random_state=42)
+    train_n = len(data)
+
     data["No_Data_Subjects_Affected"] = data["No_Data_Subjects_Affected"].astype(str)
     y = data["Is_Cyber"]
 
@@ -257,6 +273,7 @@ def train_models(df: pd.DataFrame):
             "cv_auc_mean": float(cv_auc.mean()), "cv_auc_std": float(cv_auc.std()),
             "fpr": fpr, "tpr": tpr, "cm": confusion_matrix(yte, yp),
             "perm_importance": pi, "feats": feats, "base_rate": base_rate,
+            "train_n": train_n, "full_n": full_n,
         }
     return results
 
@@ -547,7 +564,8 @@ with T_IMPACT:
 
         top12 = filtered["Sector"].value_counts().head(12).index.tolist()
         fig = px.box(filtered[filtered["Sector"].isin(top12)], x="Sector", y="Severity_Score",
-                     color="Incident_Category", color_discrete_map=CAT_COLOURS, template=TPL, height=440)
+                     color="Incident_Category", color_discrete_map=CAT_COLOURS, template=TPL, height=440,
+                     points=False)
         fig.update_layout(xaxis_tickangle=-35, yaxis_title="Severity (0–11)", xaxis_title="")
         pchart(fig, key="im_box")
         cap("Each box spans the middle 50% of severity scores for a sector; the line is the median. "
@@ -560,53 +578,70 @@ with T_IMPACT:
 def render_features():
     if filtered.empty:
         st.warning("No reports match the current filters."); return
-    eyebrow("Engineered signals", "Feature insights",
-            "Patterns that only surface once raw fields are turned into severity, sensitivity and risk features.")
+    eyebrow("A closer look", "Feature insights",
+            "Going beyond simple counts to see what really drives breach risk.")
+    st.markdown(
+        '<div style="color:#334155;font-size:.95rem;line-height:1.6;max-width:80ch;margin:.2rem 0 .2rem;">'
+        'These views combine several facts about each breach — whether it was a cyber attack, how many people it '
+        'affected, and how sensitive the data was — into a few easy-to-read measures, then look for the patterns '
+        'behind the headline numbers. Use the slider to choose how many of the busiest sectors to show.</div>',
+        unsafe_allow_html=True)
     n = st.slider("Sectors to include", 5, 15, 8, key="fi_n")
     tops = filtered["Sector"].value_counts().head(n).index.tolist()
 
-    st.markdown("##### Average severity by sector and year")
+    st.markdown("##### Severity by sector and year")
+    lead("Every breach gets a simple <b>severity score from 0 to 11</b> — higher when it was a cyber attack, "
+         "affected more people, or involved sensitive data. This grid shows the average score for each sector, "
+         "year by year.")
     hm = (filtered[filtered["Sector"].isin(tops)].groupby(["Sector", "Year"])["Severity_Score"]
           .mean().round(2).reset_index().pivot(index="Sector", columns="Year", values="Severity_Score"))
     fig = px.imshow(hm, color_continuous_scale="RdYlGn_r", labels=dict(color="Avg severity"),
                     aspect="auto", template=TPL, height=420)
     pchart(fig, key="fi_heat")
-    cap("Darker red means more severe on average. Reading a row left-to-right shows whether a sector is getting "
-        "worse or better over time — the single clearest view of where risk is concentrating.")
+    cap("Greener cells are calmer years, redder cells are worse ones. Read a row left-to-right to see whether a "
+        "sector is improving or getting worse — the clearest single view of where risk is building.")
 
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("##### How the engineered signals relate")
+        st.markdown("##### What tends to happen together")
+        lead("A quick check of which breach measures rise and fall together across all the reports.")
         cc = [c for c in ["Is_Cyber", "Is_High_Impact", "Impact_Score",
                           "Is_Special_Category", "Within_72hrs", "Severity_Score"] if c in filtered.columns]
         corr = filtered[cc].corr().round(2)
         fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu", zmin=-1, zmax=1,
                         aspect="auto", template=TPL, height=400)
         pchart(fig, key="fi_corr")
-        cap("+1 (blue) means two signals move together; −1 (red) means they move apart. Severity correlates with its "
-            "own inputs by design; treat the rest as association, not cause.")
+        cap("Blue squares mean two measures usually move in the same direction; red means opposite ways; pale means "
+            "little connection. Severity links to its own ingredients by design — read the rest as &lsquo;these often "
+            "appear together&rsquo;, not &lsquo;one causes the other&rsquo;.")
     with c2:
-        st.markdown("##### Breach scale — cyber vs non-cyber")
+        st.markdown("##### How big are the breaches?")
+        lead("Each breach is placed on a <b>1-to-6 size scale</b>, from fewer than 10 people affected (1) up to "
+             "more than 100,000 (6).")
         fig = px.histogram(filtered, x="Impact_Score", color="Incident_Category", barmode="overlay", opacity=0.7,
                            color_discrete_map=CAT_COLOURS, nbins=6, template=TPL, height=400,
                            labels={"Impact_Score": "Impact score (1 = 1–9 people … 6 = 100k+)", "count": "Reports"})
         fig.update_layout(yaxis_title="Reports")
         pchart(fig, key="fi_hist")
-        cap("Where each breach type sits on the size scale. Cyber (red) leaning right confirms attackers hit larger "
-            "record sets than typical human-error breaches.")
+        cap("Red bars (cyber) sitting further right than blue (non-cyber) show cyber attacks tend to hit far more "
+            "people at once — attackers target whole databases, while human error usually affects a few records.")
 
     c3, c4 = st.columns(2)
     with c3:
-        st.markdown("##### Severity behind each ICO decision")
+        st.markdown("##### Are the tougher outcomes aimed at the worst breaches?")
+        lead("For each type of action the ICO took, this shows the average severity of the breaches behind it.")
         ds = (filtered.groupby("Decision_Taken")["Severity_Score"].mean().round(2)
               .reset_index().sort_values("Severity_Score"))
         fig = px.bar(ds, x="Severity_Score", y="Decision_Taken", orientation="h",
                      color_discrete_sequence=[ACCENT], template=TPL, height=380)
         fig.update_layout(yaxis=dict(categoryorder="total ascending"), xaxis_title="Avg severity", yaxis_title="")
         pchart(fig, key="fi_dec")
-        cap("If tougher outcomes line up with higher average severity, the ICO&rsquo;s enforcement is tracking real risk.")
+        cap("Longer bars mean that outcome tended to follow more serious breaches. If the firmest responses sit at "
+            "the top, the regulator&rsquo;s attention is landing where the real harm is.")
     with c4:
-        st.markdown("##### Cyber + special-category exposure")
+        st.markdown("##### Where cyber meets sensitive data")
+        lead("The riskiest breaches are <b>both</b> a cyber attack <b>and</b> involve sensitive (special-category) "
+             "data such as health records or ethnicity.")
         dual = filtered[(filtered["Is_Cyber"] == 1) & (filtered["Is_Special_Category"] == 1)]
         if len(dual) > 0:
             dh = dual["Sector"].value_counts().head(n).reset_index(); dh.columns = ["Sector", "Breaches"]
@@ -614,19 +649,22 @@ def render_features():
                          color_discrete_sequence=[C_PURPLE], template=TPL, height=380)
             fig.update_layout(yaxis=dict(categoryorder="total ascending"), yaxis_title="")
             pchart(fig, key="fi_dual")
-            cap("Breaches that are <i>both</i> cyber and involve special-category data — the highest-exposure "
-                "combination for regulatory action.")
+            cap("These sectors carry the most of that worst-case combination — and so the greatest regulatory and "
+                "reputational exposure if a breach occurs.")
         else:
             st.info("No breaches in the current selection are both cyber and special-category.")
 
-    st.markdown("##### Sector → category → outcome")
+    st.markdown("##### From sector, to breach type, to outcome")
+    lead("A nested map of the busiest sectors: each large block is a sector, divided into cyber versus non-cyber, "
+         "and then into the outcome the ICO reached.")
     tm = (filtered[filtered["Sector"].isin(tops)]
           .groupby(["Sector", "Incident_Category", "Decision_Taken"]).size().reset_index(name="Reports"))
     fig = px.treemap(tm, path=["Sector", "Incident_Category", "Decision_Taken"], values="Reports",
                      color="Reports", color_continuous_scale="Blues", template=TPL, height=480)
     fig.update_layout(margin=dict(t=20, b=10))
     pchart(fig, key="fi_tree")
-    cap("Block size is report volume; click a sector to drill into its cyber/non-cyber split and the outcomes that followed.")
+    cap("Bigger blocks mean more reports. Click any sector to open it up and see how its breaches split between "
+        "cyber and human error — and what happened next.")
 
 with T_FEATURE:
     render_features()
@@ -651,9 +689,13 @@ def render_model():
     m[1].metric("Precision (cyber)", f"{rep.get('1', {}).get('precision', 0):.3f}")
     m[2].metric("Recall (cyber)", f"{rep.get('1', {}).get('recall', 0):.3f}")
     m[3].metric("Test ROC-AUC", f"{r['auc']:.3f}")
-    st.caption("5-fold cross-validated ROC-AUC: **{:.3f} ± {:.3f}**  ·  cyber base rate: **{:.1%}** "
+    st.caption("3-fold cross-validated ROC-AUC: **{:.3f} ± {:.3f}**  ·  cyber base rate: **{:.1%}** "
                "(accuracy only beats guessing if it clears this).".format(
                    r["cv_auc_mean"], r["cv_auc_std"], r["base_rate"]))
+    if r.get("train_n") and r.get("full_n") and r["train_n"] < r["full_n"]:
+        st.caption("Trained on a stratified sample of **{:,}** of {:,} records (class balance preserved) "
+                   "for hosting-tier efficiency — the full dataset still drives every chart and KPI.".format(
+                       r["train_n"], r["full_n"]))
 
     c1, c2 = st.columns(2)
     with c1:
@@ -731,7 +773,7 @@ def render_model():
             "compliance decisions, or any automated action affecting people.\n"
             "- **Features** — sector, data subject type, data category, people-affected band, time-to-report, "
             "year, and engineered flags (special-category, impact score, within-72h). Incident type is excluded.\n"
-            "- **Validation** — stratified 80/20 hold-out plus 5-fold cross-validation; the best model is chosen "
+            "- **Validation** — stratified 80/20 hold-out plus 3-fold cross-validation; the best model is chosen "
             "on mean CV ROC-AUC. Class imbalance is handled with balanced class weights where supported.\n"
             "- **Limitations** — self-reported data only; sector labels inconsistent across years; the target is "
             "partly definitional; outputs are probabilities, not facts.")
@@ -856,7 +898,7 @@ with T_DATA:
 
 #### Modelling method
 The classifier predicts the cyber / non-cyber category from breach characteristics. **Incident type is excluded** to
-avoid target leakage (the ICO derives the category from it). Validation uses a stratified hold-out plus 5-fold
+avoid target leakage (the ICO derives the category from it). Validation uses a stratified hold-out plus 3-fold
 cross-validation, and the best model is selected on mean cross-validated ROC-AUC. See the Modelling tab for the
 model recommendation and rationale.
 
